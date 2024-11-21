@@ -7,7 +7,7 @@ load_dotenv()
 
 class Database:
     client = None
-    
+
     @classmethod
     async def connect_db(cls):
         try:
