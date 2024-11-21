@@ -1,0 +1,377 @@
+!https://d2908q01vomqb2.cloudfront.net/f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59/2022/04/27/ImageReader.png
+
+Increase your content reach with automated document-to-speech conversion using Amazon AI services
+by Harry Pan and Chaitra Mathur on 02 MAY 2022 in Amazon API Gateway, Amazon Polly, Amazon Textract, Artificial Intelligence, Serverless Permalink  Comments  Share
+Reading the printed word opens up a world of information, imagination, and creativity. However, scanned books and documents may be difficult for people with vision impairment and learning disabilities to consume. In addition, some people prefer to listen to text-based content versus reading it. A document-to-speech solution extends the reach of digital content by giving text content a voice. It has uses across different industry sectors, such as:
+
+Entertainment– You can create your own audiobooks.
+Education – Students can convert their lecture notes to speech and access them anywhere.
+Patient care – Dosage instructions and precautions are typically in small fonts and hard to read. With this solution, you could take a picture, convert to speech, and listen to the instructions in order to avoid potential harm.
+The document-to-speech solution converts scanned books or documents taken on a mobile phone or handheld device automatically to speech. This solution extends the capabilities of Amazon Polly. We extract text from scanned documents using Amazon Textract, and then convert the text to speech using Amazon Polly. Solution benefits include mobility and freedom for the user plus enhanced learning capabilities for early readers.
+
+The idea originated from Harry Pan, one of the blog author’s favorite parent-child activities – reading books. “My son enjoys storybooks, but is too young to read on his own. I love reading to him, but sometimes I need to work or tend to household chores. This sparked an idea to build a document-to-speech solution that could read to him when I was busy”.
+
+Overview of solution
+The solution is an event-driven serverless architecture that uses Amazon AI services to convert scanned documents to speech. Amazon Textract and Amazon Polly belong to the topmost layer of the AWS machine learning (ML) stack. These services allow developers to easily add intelligence to any application without prior ML knowledge.
+
+Amazon Textract is an ML service that automatically extracts text, handwriting, and data from scanned documents. It goes beyond simple optical character recognition (OCR) to identify, understand, and extract data from forms and tables. Amazon Textract uses ML to read and process any type of document, accurately extracting text, handwriting, tables, and other data without any manual effort.
+
+Amazon Polly is a text-to-speech service that turns text into lifelike speech, allowing you to create applications that talk and to build entirely new categories of speech-enabled products. Amazon Polly uses advanced deep learning technologies to synthesize speech that sounds like a human voice.
+
+There are significant advantages of using Amazon AI services:
+
+They take little effort; you can integrate these APIs into any application
+They offer highly scalable and cost-effective solutions
+Your organization can shift its focus from development of custom models to business outcomes
+The solution also uses Amazon API Gateway to quickly stand up APIs that the web UI can invoke to perform operations like uploading documents and converting scanned documents to speech. API Gateway provides a scalable way to create, publish, and maintain secure APIs. In this solution, we also use API Gateway WebSocket support to establish a persistent connection between the web UI and the backend, so the backend can keep sending progress updates to user in real time.
+
+We use AWS Lambda functions to trigger Amazon Textract and Amazon Polly asynchronous jobs. Lambda is a highly available and scalable compute service that lets you run code without provisioning resources.
+
+We use an AWS Step Functions state machine to orchestrate two parallel Lambda functions – one to moderate text and the other to store text in Amazon Simple Storage Service (Amazon S3). Step Functions is a serverless orchestration service to define application workflows as a series of event-driven steps.
+
+Architecture and code
+As described in the previous section, we use two key AI services, Amazon Textract and Amazon Polly, to build a document-to-speech conversion solution. One additional service that we haven’t touched upon is AWS Amplify. Amplify allows front-end developers to quickly build extensible, full stack web and mobile apps. With Amplify, you can easily configure a backend, connect an application to it within minutes, and scale effortlessly. We use Amplify to host a web UI that allows users to upload their scanned documents.
+
+You can also use your own UI without Amplify. As we dive deep into this solution, we show how you can use any client application to connect to the backend to convert documents to speech – as long as they support REST and WebSocket APIs. The web UI here is simply to demonstrate key features of this solution. As of this writing, the solution supports JPEG, PNG, and PDF input formats, and the English language.
+
+The following diagram illustrates the solution architecture.
+
+We walk through this architecture by following the path of a single user request:
+
+The user visits the web UI hosted on Amplify. The UI code is the index.html file in the client folder of the code repository.
+The user chooses a JPG, PDF, or PNG file to upload using the web UI.
+The user initiates the Convert & Play Audio process from the web UI, which uploads the input file to an S3 bucket, through a REST API hosted on API Gateway.
+When the upload is complete, the document-to-speech conversion starts as a background process:
+During the conversion, the web client keeps a persistent WebSocket connection with the API Gateway. This allows the backend processes (Lambda functions) to continuously send progress updates to the web client.
+The request goes through the API Gateway and triggers the Lambda function convert-images-to-text. This function calls Amazon Textract asynchronously to convert the document to text.
+When the image-to-text conversion is complete, Amazon Textract sends a notification to Amazon Simple Notification Service (Amazon SNS).
+The notification triggers the Lambda function on-textract-ready, which kicks off a Step Functions state machine.
+The state machine orchestrates the following steps:
+It runs the Lambda function retrieve-text to obtain the converted text from Amazon Textract.
+It then runs Lambda functions moderate-text and store-text in parallel. moderate-text stops further processing when undesirable words are detected, and store-text stores a copy of the converted text to an S3 bucket.
+After the parallel steps are complete, the state machine runs the Lambda function convert-text-to-audio, which invokes Amazon Polly asynchronously with the converted text, for speech conversion. The state machine finishes after this step.
+Similar to Amazon Textract, Amazon Polly sends a notification to Amazon SNS when the job is done. The notification triggers the Lambda function on-polly-ready, which sends a final message to the web UI along with the Amazon S3 location of the converted audio file.
+The web UI downloads the final converted audio file from Amazon S3 via a REST API, and then plays it for the user.
+The application uses an Amazon DynamoDB table to track job information such as Amazon Textract job ID, Amazon Polly job ID, and more.
+The code is hosted on GitHub and is deployed using AWS Cloud Development Kit (AWS CDK), an open-source software development framework to define cloud application resources using familiar programming languages. AWS CDK provisions resources in a repeatable manner through AWS CloudFormation.
+
+Prerequisites
+The only prerequisite to deploy this solution is an AWS account.
+
+Deploy the solution
+The following steps detail how to deploy the application:
+
+Sign in to your AWS account.
+On the AWS Cloud9 console, open an existing environment, or choose Create environment to create a new one.
+In your AWS Cloud9 IDE, on the Window menu, choose New Terminal to open a terminal.
+All the following steps are done in the same terminal.
+
+Clone the git repository and enter the project directory:
+git clone --depth 1 https://github.com/aws-samples/scanned-documents-to-speech.git
+cd scanned-documents-to-speech
+Create a Python virtual environment:
+python3 -m venv .venv
+After the init process is complete and the virtual environment is created, use the following step to activate your virtual environment:
+source .venv/bin/activate
+After the virtual environment is activated, install the required dependencies:
+pip install -r requirements.txt
+You can now synthesize the CloudFormation templates from the AWS CDK code:
+cdk synth
+Deploy the AWS CDK application and capture AWS CDK outputs needed later:
+cdk deploy --all --outputs-file cdk-outputs.json
+You must confirm changes to be deployed for each stack. You can check the stack creation progress on the AWS Cloud Formation console.
+
+To visit the web client, run the following command and follow its output to kick off front-end deployment and use the web client:
+./extract-cdk-outputs.py cdk-outputs.json
+Key things to note:
+
+The [extract-cdk-outputs.py](http://extract-cdk-outputs.py/) script prints out the URL of the web UI. The script also prints out strings of the S3 bucket name, file API endpoint, and conversion API endpoint, which need to be set on the web UI before uploading a document.
+You can set the list of undesirable words in the variable in the moderate-text Lambda function.
+Use the application
+The following steps demonstrate how to use the application via the web UI.
+
+Following the last step of the deployment, fill in the fields for S3 Bucket Name, File Endpoint, and Conversion Endpoint in the web UI.
+
+Choose Choose File to upload an input file.
+Choose Convert & Play Audio.
+
+The web UI shows the progress of the ongoing conversion.
+
+The web UI plays the audio automatically when the conversion is complete.
+
+Clean up
+Run the following command to delete all resources and avoid incurring future charges:
+
+cdk destroy --all
+Conclusion
+In this post, we demonstrated a solution to quickly deploy a document-to-speech conversion application by using two powerful AI services: Amazon Textract and Amazon Polly. We showed how the solution works and provided a detailed walkthrough of the code and deployment steps. This solution is meant to be a reference architecture or quick start that you can further enhance. Notably, you could add support for more human languages, add a queue for buffering incoming requests, and authenticate users.
+
+As discussed in this post, we see multiple use cases for this solution across different industry verticals. Give it a try and let us know how this solved your use case by leaving feedback in the comments section. You can access the resources for the solution in the document to speech GitHub repository.
+
+References
+More information is available at the following resources:
+
+Amazon Textract Developer Guide
+Amazon Polly Developer Guide
+Working with WebSocket APIs
+AWS CDK Construct Library
+AWS Amplify Construct Library
+
+Here's an outline of the guide on automated document-to-speech conversion using Amazon AI services:
+
+Table of Contents
+
+I. Introduction
+
+- A. Purpose of document-to-speech conversion
+- B. Industry use cases
+- C. Origin of the idea
+
+II. Solution Overview
+
+- A. Event-driven serverless architecture
+- B. Key Amazon AI services
+- C. Advantages of Amazon AI services
+- D. Additional AWS services used
+
+III. Architecture and Code
+
+- A. AWS Amplify for web UI hosting
+- B. Supported input formats and languages
+- C. Detailed architecture walkthrough
+
+IV. Deployment Instructions
+
+- A. Prerequisites
+- B. Step-by-step deployment process
+
+V. Using the Application
+
+- A. Web UI setup
+- B. Document upload and conversion process
+
+VI. Clean Up
+
+- A. Resource deletion process
+
+VII. Conclusion
+
+- A. Solution summary
+- B. Potential enhancements
+- C. Feedback and resources
+
+VIII. References
+
+- A. Relevant AWS documentation
+
+Based on the content provided, I can outline a week-long class on automated document-to-speech conversion using Amazon AI services. Here's a suggested structure:
+
+**Day 1: Introduction and Overview**
+
+- Introduction to document-to-speech conversion and its applications
+- Overview of the solution architecture
+- Introduction to key Amazon AI services: Amazon Textract and Amazon Polly
+
+**Day 2: Deep Dive into Amazon Textract and Amazon Polly**
+
+- Detailed exploration of Amazon Textract capabilities
+- In-depth look at Amazon Polly features
+- Hands-on exercises with both services
+
+**Day 3: Supporting AWS Services**
+
+- Introduction to AWS Lambda and its role in the solution
+- Overview of Amazon API Gateway and WebSocket support
+- Introduction to AWS Step Functions for workflow orchestration
+
+**Day 4: Architecture and Code Walkthrough**
+
+- Detailed architecture walkthrough
+- Code review and explanation
+- Discussion on AWS Amplify for web UI hosting
+
+**Day 5: Deployment and Usage**
+
+- Step-by-step deployment process
+- Hands-on session: Deploying the solution
+- Using the application: Web UI setup and document conversion process
+
+**Day 6: Advanced Topics and Customization**
+
+- Extending the solution to support more languages and input formats
+- Adding authentication and request buffering
+- Best practices for scaling and optimizing the solution
+
+**Day 7: Project Work and Wrap-up**
+
+- Guided project: Customizing the solution for specific use cases
+- Troubleshooting common issues
+- Discussion on potential enhancements and future directions
+- Course wrap-up and Q&A session
+
+This structure covers the main aspects of the solution while providing hands-on experience and opportunities for customization. Each day builds upon the previous, culminating in a project that allows participants to apply their learning to real-world scenarios.
+
+Day 1: Introduction and Foundations
+
+(10 minutes) Introduction & Icebreaker:
+Course overview, learning objectives, and introductions.
+Briefly discuss real-world applications of document-to-speech technology.
+Optional: Quick poll or brainstorming session on potential use cases.
+
+Speech Outline (10 minutes):
+
+1. Welcome and Course Introduction (3 minutes)
+- Greet participants and introduce yourself
+- Briefly explain the course topic: Automated document-to-speech conversion using Amazon AI services
+- Outline the course structure: 7-day program covering various aspects of the technology
+1. Learning Objectives (2 minutes)
+- Understand the fundamentals of document-to-speech conversion
+- Gain hands-on experience with Amazon Textract and Amazon Polly
+- Learn to build a serverless architecture for document-to-speech conversion
+- Develop skills in integrating various AWS services for a complete solution
+1. Importance of Document-to-Speech Technology (2 minutes)
+- Discuss accessibility challenges with traditional text-based content
+- Highlight benefits of audio consumption: increased engagement and multi-tasking capabilities
+- Mention real-world applications across industries (e.g., entertainment, education, patient care)
+1. Icebreaker Activity: Use Case Brainstorming (3 minutes)
+- Divide participants into small groups
+- Ask each group to brainstorm potential use cases for document-to-speech technology
+- Have groups share their top ideas with the class
+
+Detailed Instructions:
+
+1. Prepare a brief presentation slide deck covering the welcome, course introduction, and learning objectives.
+2. Create a handout summarizing the course structure and learning objectives for participants to reference throughout the week.
+3. For the icebreaker activity:
+- Prepare small whiteboards or large sticky notes for each group
+- Set a timer for 2 minutes for brainstorming
+- Allow 1 minute for groups to share their top ideas
+
+Worksheet Suggestions:
+
+1. Course Overview Worksheet:
+- Include a table with each day's main topics
+- Provide space for participants to write their personal learning goals for each day
+1. Use Case Brainstorming Worksheet:
+- Divide the page into sections for different industries (e.g., Healthcare, Education, Entertainment)
+- Include prompts such as "How could document-to-speech technology improve..."
+- Provide space for participants to jot down ideas during the brainstorming session
+
+(20 minutes) Document-to-Speech: Importance and Process
+
+- Discuss accessibility challenges in text-based content (5 minutes)
+    - Visual impairments
+    - Learning disabilities
+    - Situational limitations (e.g., driving, exercising)
+- Explore benefits of audio content (5 minutes)
+    - Improved accessibility
+    - Increased engagement
+    - Multitasking capabilities
+    - Enhanced learning for auditory learners
+- Overview of document-to-speech conversion (10 minutes)
+    - Text extraction from various document formats
+    - Text preprocessing and optimization
+    - Speech synthesis techniques
+    - Output formats and delivery methods
+
+(25 minutes) Introduction to AWS AI Services:
+Core concepts of Artificial Intelligence and Machine Learning.
+Overview of Amazon Textract: Functionality, use cases, and advantages.
+Overview of Amazon Polly: Features, voices, and language support.
+Demonstration: Basic Textract and Polly API calls (using AWS console or SDK).
+
+Day 2: Deep Dive into Textract and Polly
+
+(20 minutes) Amazon Textract in Depth:
+Different Textract APIs: AnalyzeDocument, DetectDocumentText, etc.
+Extracting various data types: Text, tables, forms, and handwriting.
+Handling different document formats: Images (JPEG, PNG), PDFs.
+Improving accuracy: Pre-processing techniques, document quality.
+
+(20 minutes) Amazon Polly in Depth:
+Exploring different voices and languages.
+Customizing speech output: SSML tags, pronunciation lexicons.
+Speech synthesis markup language (SSML) for controlling pronunciation, intonation, etc.
+Use cases beyond simple reading: Creating interactive voice responses, generating audio for videos, etc.
+
+(15 minutes) Hands-on Lab:
+Guided exercise: Extract text from a complex document using Textract.
+Convert the extracted text to speech using Polly with different voices and settings.
+
+Day 3: Serverless Infrastructure with AWS Lambda and API Gateway
+
+(15 minutes) Introduction to Serverless Computing:
+Benefits of serverless: Scalability, cost-efficiency, reduced operational overhead.
+Overview of AWS Lambda: Function as a service (FaaS), event-driven architecture.
+
+(20 minutes) Building APIs with Amazon API Gateway:
+Creating RESTful APIs for document upload and conversion triggers.
+Integrating API Gateway with Lambda functions.
+Securing APIs: Authentication and authorization mechanisms.
+
+(20 minutes) Real-time Communication with WebSockets:
+Understanding WebSocket APIs for persistent connections.
+Implementing progress updates and bi-directional communication.
+Hands-on Lab: Set up a basic API Gateway endpoint that triggers a Lambda function.
+
+Day 4: Workflow Orchestration and State Management
+
+(20 minutes) Introduction to AWS Step Functions:
+Building and visualizing serverless workflows.
+Defining states, transitions, and error handling.
+Integrating Step Functions with Lambda, Textract, and Polly.
+
+(25 minutes) Designing a Document-to-Speech Workflow:
+Step-by-step breakdown of the workflow from the AWS blog post.
+Orchestrating Textract and Polly jobs using Step Functions.
+Implementing parallel processing for text moderation and storage.
+
+(10 minutes) Hands-on Lab:
+Create a simple Step Functions workflow that involves two Lambda functions.
+
+Day 5: Building the Web Application with AWS Amplify
+
+(20 minutes) Introduction to AWS Amplify:
+Accelerated web and mobile development with Amplify Framework.
+Key features: Authentication, storage, API management, hosting.
+
+(25 minutes) Building the User Interface:
+Designing the front-end for document upload and audio playback.
+Connecting the UI to the backend APIs using Amplify libraries.
+Implementing real-time updates with WebSockets.
+
+(10 minutes) Hands-on Lab:
+Deploy a basic web application using Amplify Console.
+Day 6: Advanced Topics and Best Practices
+
+(20 minutes) Security Considerations:
+Securing sensitive data: Encryption, access control.
+Protecting against malicious inputs: Sanitization and validation.
+Implementing user authentication and authorization.
+
+(20 minutes) Performance Optimization:
+Improving Textract accuracy: Image pre-processing, document quality.
+Optimizing Polly performance: Caching, voice selection.
+Scaling the solution: Handling high volumes of requests.
+
+(15 minutes) Error Handling and Monitoring:
+Implementing robust error handling mechanisms.
+Monitoring the application: CloudWatch, X-Ray.
+
+Day 7: Project Work and Wrap-up
+
+(40 minutes) Project Work:
+Guided project: Building a customized document-to-speech application.
+Possible extensions: Support for multiple languages, batch processing, integration with other AWS services.
+
+(15 minutes) Q&A and Wrap-up:
+Open discussion: Addressing questions and challenges.
+Course review and feedback.
+Resources for further learning: AWS documentation, community forums.
+
+Important Notes:
+
+Hands-on Labs: Adjust the complexity and duration of labs based on the participants' skill level.
+Real-world Examples: Incorporate relevant examples and case studies throughout the course.
+Interactive Elements: Include quizzes, polls, and group discussions to keep participants engaged.
+AWS Account: Ensure participants have access to an AWS account for hands-on activities.
