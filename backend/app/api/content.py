@@ -1,9 +1,9 @@
 # backend/app/api/content.py
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List, Optional
-from app.models.content import Content
-from app.services.content import ContentService
-from app.database import Database
+from ..models.content import Content  # Relative import
+from ..services.content import ContentService  # Relative import 
+from ..database import Database  # Relative import
 
 router = APIRouter()
 
