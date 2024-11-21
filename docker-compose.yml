@@ -3,7 +3,9 @@ version: '3.8'
 
 services:
   frontend:
-    build: .
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     ports:
       - "3000:80"
     environment:
@@ -12,7 +14,9 @@ services:
       - backend
 
   backend:
-    image: geauxacademy.azurecr
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     volumes:
