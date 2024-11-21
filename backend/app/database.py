@@ -7,43 +7,54 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Database:
-    def __init__(self):
-        self.client = None
-        self.db = None
+    _instance = None
+    client = None 
+    db = None
 
-    async def connect_db(self):
-        self.client = AsyncIOMotorClient("mongodb://mongo:27017")
-        return self.client
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    @classmethod
+    async def connect_db(cls):
         """
         Connect to the MongoDB database.
-
-        This method retrieves the MongoDB URI from environment variables,
-        establishes a connection to the MongoDB server, and sets the database
-        instance to 'contentai'.
+        
         Returns:
-            The database instance if the connection is successful.
-        """
-
-    async def disconnect_db(self):
-        """
-        Disconnects from the MongoDB database and resets the client and db attributes.
-
-        This method closes the connection to the MongoDB server and sets the client and
-        database attributes to None.
+            The database instance if successful.
         """
         try:
-            if self.client:
-                self.client.close()
-            self.client = None
-            self.db = None
+            # Get connection details from environment variables
+            mongo_url = os.getenv("MONGODB_URL", "mongodb://mongo:27017")
+            db_name = os.getenv("MONGODB_DB", "contentai")
+
+            # Create client connection
+            cls.client = AsyncIOMotorClient(mongo_url)
+            cls.db = cls.client[db_name]
+            
+            # Test connection
+            await cls.client.admin.command('ping')
+            logging.info("Successfully connected to MongoDB")
+            
+            return cls.db
+
         except Exception as e:
-            logging.error(f"MongoDB disconnection error: {e}")
-            raise ConnectionError("Failed to disconnect from MongoDB")
+            logging.error(f"Failed to connect to MongoDB: {e}")
+            raise ConnectionError(f"Could not connect to MongoDB: {e}")
+
+    @classmethod    
+    async def disconnect_db(cls):
+        """
+        Disconnects from the MongoDB database.
+        """
         try:
-            await self.client.close()
+            if cls.client:
+                cls.client.close()
+                logging.info("MongoDB connection closed")
         except Exception as e:
-            logging.error(f"Error closing MongoDB connection: {e}")
-            raise ConnectionError("Failed to disconnect from MongoDB")
-        self.client = None
-        self.db = None
-        logging.info("MongoDB connection closed")
+            logging.error(f"Error disconnecting from MongoDB: {e}")
+            raise ConnectionError(f"Failed to disconnect from MongoDB: {e}")
+        finally:
+            cls.client = None
+            cls.db = None
